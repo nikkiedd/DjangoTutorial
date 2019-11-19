@@ -7,6 +7,7 @@ from recipe import views
 router = DefaultRouter()    # automatically registers the appropriate URLs for all the actions in our viewset
 router.register('tags', views.TagViewSet)
 router.register('ingredients', views.IngredientViewSet)
+router.register('recipes', views.RecipeViewSet)
 
 app_name = 'recipe'
 
