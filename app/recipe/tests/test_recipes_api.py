@@ -1,3 +1,8 @@
+import tempfile
+import os 
+
+from PIL import Image
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -13,6 +18,10 @@ RECIPES_URL = reverse('recipe:recipe-list') #app:identifier of the url in the ap
 
 # /api/recipe/recipes - url for recipe-list
 # /api/recipe.recipes/:id/ - url for recipe-detail
+
+def image_upload_url(recipe_id):
+    """Return URL for recipe image upload"""
+    return reverse('recipe:recipe-upload-image', args=[recipe_id])
 
 def detail_url(recipe_id):
     """Return recipe-detail url for the recipe with the given recipe_id"""
@@ -193,4 +202,40 @@ class PrivateRecipeApiTests(TestCase):
         
         self.assertEqual(len(recipe.tags.all()), 0)
 
+
+class RecipeImageUploadTests(TestCase):
+    """Test uploading images to recipes functionality"""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = get_user_model().objects.create_user(
+            'user@user.com',
+            'testpassss'
+        )
+        self.client.force_authenticate(self.user)
+        self.recipe = sample_recipe(user=self.user)
+    
+    def tearDown(self):
+        self.recipe.image.delete()
+    
+    def test_upload_image(self):
+        """Test uploading an image to recipe"""
+        url = image_upload_url(self.recipe.id)
+        with tempfile.NamedTemporaryFile(suffix='.jpg') as ntf: # creates a named temporary file that is deleted after exiting the 'with'
+            img = Image.new('RGB', (10,10)) # creates a 10x10 black square
+            img.save(ntf, format='JPEG')
+            ntf.seek(0) # set the pointer back to the beginning of the file
+            res = self.client.post(url, {'image': ntf}, format='multipart') # we use the multipart option for the format to indicate that we're sending data and not a json
+
+        self.recipe.refresh_from_db()
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn('image', res.data)
+        self.assertTrue(os.path.exists(self.recipe.image.path)) # check whether the path assigned to our img exists in the fs
+
+    def test_upload_invalid_image(self):
+        """Test uploading an invalid image to recipe"""
+        url = image_upload_url(self.recipe.id)
+        res = self.client.post(url, {'image': 'ceci n\'est pas une image'}, format='multipart')
+
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
 
